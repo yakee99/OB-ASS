@@ -4,7 +4,7 @@ patchSetMaxListenersForElectron();
 
 import './providers';
 
-import type { Editor, WorkspaceLeaf } from 'obsidian';
+import type { Editor, ObsidianProtocolData, WorkspaceLeaf } from 'obsidian';
 import { MarkdownView, Notice, Plugin } from 'obsidian';
 
 import { DEFAULT_CLAUDIAN_SETTINGS } from './app/settings/defaultSettings';
@@ -36,6 +36,12 @@ import { ClaudianSettingTab } from './features/settings/ClaudianSettings';
 import { setLocale } from './i18n/i18n';
 import type { Locale } from './i18n/types';
 import { OPENCODE_PLAN_MODE_ID, OPENCODE_SAFE_MODE_ID } from './providers/opencode/modes';
+import type { ConversationLinkLocator } from './utils/conversationLink';
+import {
+  buildConversationLinkUrl,
+  buildConversationMarkdownLink,
+  normalizeConversationLinkLabel,
+} from './utils/conversationLink';
 import { buildCursorContext } from './utils/editor';
 import { revealWorkspaceLeaf } from './utils/obsidianCompat';
 import { getVaultPath } from './utils/path';
@@ -61,7 +67,7 @@ export default class ClaudianPlugin extends Plugin {
       (leaf) => new ClaudianView(leaf, this)
     );
 
-    this.addRibbonIcon('bot', 'Open Claudian', () => {
+    this.addRibbonIcon('bot', 'Open Oiwen', () => {
       void this.activateView();
     });
 
@@ -174,6 +180,16 @@ export default class ClaudianPlugin extends Plugin {
       },
     });
 
+    this.registerObsidianProtocolHandler('oiwen', (params: ObsidianProtocolData) => {
+      void this.handleConversationLink(params);
+    });
+    this.registerObsidianProtocolHandler('claudian', (params: ObsidianProtocolData) => {
+      void this.handleConversationLink(params);
+    });
+    this.registerObsidianProtocolHandler('realclaudian', (params: ObsidianProtocolData) => {
+      void this.handleConversationLink(params);
+    });
+
     this.addSettingTab(new ClaudianSettingTab(this.app, this));
   }
 
@@ -212,6 +228,30 @@ export default class ClaudianPlugin extends Plugin {
     }
   }
 
+  buildConversationLink(
+    conversationId: string,
+    locator: ConversationLinkLocator = {},
+  ): string {
+    return buildConversationLinkUrl(
+      this.app.vault.getName(),
+      conversationId,
+      locator,
+    );
+  }
+
+  buildMessageMarkdownLink(
+    conversationId: string,
+    message: Pick<Conversation['messages'][number], 'id' | 'content' | 'displayContent' | 'userMessageId' | 'assistantMessageId'>,
+  ): string {
+    const url = this.buildConversationLink(conversationId, {
+      messageId: message.id,
+      ...(message.userMessageId ? { userMessageId: message.userMessageId } : {}),
+      ...(message.assistantMessageId ? { assistantMessageId: message.assistantMessageId } : {}),
+    });
+    const label = normalizeConversationLinkLabel(message.displayContent ?? message.content);
+    return buildConversationMarkdownLink(label, url);
+  }
+
   private getLeafForPlacement(placement: ChatViewPlacement): WorkspaceLeaf | null {
     const { workspace } = this.app;
     switch (placement) {
@@ -248,6 +288,51 @@ export default class ClaudianPlugin extends Plugin {
 
     await this.activateView();
     return this.getView();
+  }
+
+  private async handleConversationLink(params: ObsidianProtocolData): Promise<void> {
+    const conversationId = typeof params.conversationId === 'string'
+      ? params.conversationId
+      : typeof params.conversation === 'string'
+        ? params.conversation
+        : undefined;
+
+    if (!conversationId) {
+      new Notice('Oiwen link is missing a conversation ID.');
+      return;
+    }
+
+    const result = await this.openConversationFromLink(conversationId, {
+      ...(typeof params.messageId === 'string' ? { messageId: params.messageId } : {}),
+      ...(typeof params.userMessageId === 'string' ? { userMessageId: params.userMessageId } : {}),
+      ...(typeof params.assistantMessageId === 'string' ? { assistantMessageId: params.assistantMessageId } : {}),
+    });
+
+    if (result === 'conversation-not-found') {
+      new Notice('Conversation not found.');
+    } else if (result === 'message-not-found') {
+      new Notice('Conversation opened, but the linked message was not found.');
+    } else if (result === 'view-not-found') {
+      new Notice('Unable to open the Oiwen view.');
+    }
+  }
+
+  private async openConversationFromLink(
+    conversationId: string,
+    locator: ConversationLinkLocator,
+  ): Promise<'opened' | 'message-not-found' | 'conversation-not-found' | 'view-not-found'> {
+    const crossViewResult = this.findConversationAcrossViews(conversationId);
+    if (crossViewResult) {
+      await revealWorkspaceLeaf(this.app.workspace, crossViewResult.view.leaf);
+      return crossViewResult.view.openConversationByLink(conversationId, locator);
+    }
+
+    const view = await this.ensureViewOpen();
+    if (!view) {
+      return 'view-not-found';
+    }
+
+    return view.openConversationByLink(conversationId, locator);
   }
 
   private async openNewTab(): Promise<void> {
@@ -591,9 +676,22 @@ export default class ClaudianPlugin extends Plugin {
   }
 
   private async loadSdkMessagesForConversation(conversation: Conversation): Promise<void> {
+    const previousSessionLocation = JSON.stringify({
+      providerState: conversation.providerState,
+      sessionId: conversation.sessionId,
+    });
     await ProviderRegistry
       .getConversationHistoryService(conversation.providerId)
       .hydrateConversationHistory(conversation, getVaultPath(this.app));
+    const nextSessionLocation = JSON.stringify({
+      providerState: conversation.providerState,
+      sessionId: conversation.sessionId,
+    });
+    if (previousSessionLocation !== nextSessionLocation) {
+      await this.storage.sessions.saveMetadata(
+        this.storage.sessions.toSessionMetadata(conversation)
+      );
+    }
   }
 
   async createConversation(options?: {

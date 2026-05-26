@@ -1,7 +1,7 @@
 import type { ProviderConversationHistoryService } from '../../../core/providers/types';
 import type { Conversation } from '../../../core/types';
 import { getOpencodeState, type OpencodeProviderState } from '../types';
-import { loadOpencodeSessionMessages } from './OpencodeHistoryStore';
+import { loadOpencodeSessionMessagesWithDatabasePath } from './OpencodeHistoryStore';
 
 export class OpencodeConversationHistoryService implements ProviderConversationHistoryService {
   private hydratedKeys = new Map<string, string>();
@@ -25,14 +25,21 @@ export class OpencodeConversationHistoryService implements ProviderConversationH
       return;
     }
 
-    const messages = await loadOpencodeSessionMessages(sessionId, state);
+    const { databasePath, messages } = await loadOpencodeSessionMessagesWithDatabasePath(sessionId, state);
     if (messages.length === 0) {
       this.hydratedKeys.delete(conversation.id);
       return;
     }
 
+    if (databasePath && databasePath !== state.databasePath) {
+      conversation.providerState = {
+        ...(conversation.providerState ?? {}),
+        databasePath,
+      };
+    }
+
     conversation.messages = messages;
-    this.hydratedKeys.set(conversation.id, hydrationKey);
+    this.hydratedKeys.set(conversation.id, `${sessionId}::${databasePath ?? ''}`);
   }
 
   async deleteConversationSession(
@@ -63,6 +70,7 @@ export class OpencodeConversationHistoryService implements ProviderConversationH
   ): Record<string, unknown> | undefined {
     const state = getOpencodeState(conversation.providerState);
     const providerState: OpencodeProviderState = {
+      ...(state.cliPath ? { cliPath: state.cliPath } : {}),
       ...(state.databasePath ? { databasePath: state.databasePath } : {}),
     };
 

@@ -1,5 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 import { extractResolvedAnswersFromResultText } from '../../../core/tools/toolInput';
 import { isWriteEditTool, TOOL_ASK_USER_QUESTION } from '../../../core/tools/toolNames';
@@ -11,7 +13,10 @@ import {
   normalizeOpencodeToolName,
   normalizeOpencodeToolUseResult,
 } from '../normalization/opencodeToolNormalization';
-import { resolveExistingOpencodeDatabasePath } from '../runtime/OpencodePaths';
+import {
+  resolveExistingOpencodeDatabasePath,
+  resolveOpencodeDatabasePath,
+} from '../runtime/OpencodePaths';
 import type { OpencodeProviderState } from '../types';
 
 type StoredRow = Record<string, unknown>;
@@ -34,19 +39,64 @@ export async function loadOpencodeSessionMessages(
   sessionId: string,
   providerState?: OpencodeProviderState,
 ): Promise<ChatMessage[]> {
-  const databasePath = resolveExistingOpencodeDatabasePath(providerState?.databasePath);
+  return (await loadOpencodeSessionMessagesWithDatabasePath(sessionId, providerState)).messages;
+}
+
+export async function loadOpencodeSessionMessagesWithDatabasePath(
+  sessionId: string,
+  providerState?: OpencodeProviderState,
+): Promise<{ databasePath: string | null; messages: ChatMessage[] }> {
+  const preferredPath = providerState?.databasePath;
+  const databasePath = resolveExistingOpencodeDatabasePath(preferredPath);
   if (!databasePath || databasePath === ':memory:' || !fs.existsSync(databasePath)) {
-    return [];
+    return { databasePath, messages: [] };
   }
 
   const rows = await loadOpencodeSessionRows(databasePath, sessionId);
-  if (!rows) {
-    return [];
+  if (rows && rows.messageRows.length > 0) {
+    return {
+      databasePath,
+      messages: mapOpencodeMessages(
+        hydrateStoredMessages(rows.messageRows, rows.partRows),
+      ),
+    };
   }
 
-  return mapOpencodeMessages(
-    hydrateStoredMessages(rows.messageRows, rows.partRows),
-  );
+  const exportedMessages = loadOpencodeExportMessages(sessionId, providerState);
+  if (exportedMessages.length > 0) {
+    return {
+      databasePath,
+      messages: mapOpencodeMessages(exportedMessages),
+    };
+  }
+
+  const fallbackDatabasePath = resolveOpencodeDatabasePath();
+  if (
+    fallbackDatabasePath
+    && fallbackDatabasePath !== databasePath
+    && fallbackDatabasePath !== ':memory:'
+    && fs.existsSync(fallbackDatabasePath)
+  ) {
+    const fallbackRows = await loadOpencodeSessionRows(fallbackDatabasePath, sessionId);
+    if (fallbackRows && fallbackRows.messageRows.length > 0) {
+      return {
+        databasePath: fallbackDatabasePath,
+        messages: mapOpencodeMessages(
+          hydrateStoredMessages(fallbackRows.messageRows, fallbackRows.partRows),
+        ),
+      };
+    }
+  }
+
+  const fallbackExportedMessages = loadOpencodeExportMessages(sessionId, providerState);
+  if (fallbackExportedMessages.length > 0) {
+    return {
+      databasePath: fallbackDatabasePath ?? databasePath,
+      messages: mapOpencodeMessages(fallbackExportedMessages),
+    };
+  }
+
+  return { databasePath, messages: [] };
 }
 
 export function mapOpencodeMessages(messages: StoredMessage[]): ChatMessage[] {
@@ -431,6 +481,118 @@ function loadSessionRowsWithSqliteCli(
   }
 
   return { messageRows, partRows };
+}
+
+function loadOpencodeExportMessages(
+  sessionId: string,
+  providerState?: OpencodeProviderState,
+): StoredMessage[] {
+  for (const command of getOpencodeExportCommands(providerState)) {
+    const result = runOpencodeExportCommand(command, sessionId);
+
+    if (result.error || result.status !== 0) {
+      continue;
+    }
+
+    const stdout = typeof result.stdout === 'string'
+      ? result.stdout
+      : result.stdout?.toString('utf8') ?? '';
+    const exported = parseOpencodeExportOutput(stdout);
+    if (exported.length > 0) {
+      return exported;
+    }
+  }
+
+  return [];
+}
+
+function runOpencodeExportCommand(
+  command: string,
+  sessionId: string,
+): ReturnType<typeof spawnSync> {
+  const options = {
+    encoding: 'utf8' as const,
+    timeout: 15_000,
+    windowsHide: true,
+  };
+
+  if (process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command)) {
+    return spawnSync(
+      command,
+      ['export', sessionId],
+      {
+        ...options,
+        shell: true,
+      },
+    );
+  }
+
+  return spawnSync(command, ['export', sessionId], options);
+}
+
+function parseOpencodeExportOutput(output: string): StoredMessage[] {
+  const jsonStart = output.indexOf('{');
+  if (jsonStart === -1) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(output.slice(jsonStart)) as unknown;
+    if (!isPlainObject(parsed) || !Array.isArray(parsed.messages)) {
+      return [];
+    }
+
+    return parsed.messages.flatMap((message): StoredMessage[] => {
+      if (!isPlainObject(message)) {
+        return [];
+      }
+
+      const info = getObject(message.info);
+      const rawParts = Array.isArray(message.parts) ? message.parts : [];
+      if (!info) {
+        return [];
+      }
+
+      return [{
+        info,
+        parts: rawParts.filter((part): part is StoredRow => isPlainObject(part)),
+      }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function getOpencodeExportCommands(
+  providerState?: OpencodeProviderState,
+): string[] {
+  const commands: string[] = [];
+  const seen = new Set<string>();
+  const add = (command: string | undefined | null): void => {
+    const trimmed = command?.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      return;
+    }
+    seen.add(trimmed);
+    commands.push(trimmed);
+  };
+
+  add(providerState?.cliPath);
+  add(process.env.OPENCODE_CLI_PATH);
+  add(process.env.OPENCODE_BIN);
+  add(process.env.OPENCODE_PATH);
+  add('opencode');
+
+  if (process.platform === 'win32') {
+    const home = process.env.USERPROFILE || os.homedir();
+    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+    const npmBin = path.join(appData, 'npm');
+    add(path.join(npmBin, 'opencode.cmd'));
+    add(path.join(npmBin, 'opencode.exe'));
+    add(path.join(npmBin, 'node_modules', 'opencode-ai', 'bin', 'opencode.exe'));
+  }
+
+  return commands;
 }
 
 function runSqlite3JsonQuery(

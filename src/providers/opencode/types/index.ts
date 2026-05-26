@@ -1,4 +1,5 @@
 export interface OpencodeProviderState {
+  cliPath?: string;
   databasePath?: string;
 }
 

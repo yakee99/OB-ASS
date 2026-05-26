@@ -1,6 +1,68 @@
-import { mapOpencodeMessages } from '../../../../src/providers/opencode/history/OpencodeHistoryStore';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
+import {
+  loadOpencodeSessionMessagesWithDatabasePath,
+  mapOpencodeMessages,
+} from '../../../../src/providers/opencode/history/OpencodeHistoryStore';
+
+function createEmptyOpencodeDb(dbPath: string): void {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const db = new DatabaseSync(dbPath);
+  db.exec(`
+    create table session (id text primary key, time_created integer);
+    create table message (id text primary key, session_id text not null, time_created integer not null, time_updated integer not null, data text not null);
+    create table part (id text primary key, message_id text not null, session_id text not null, time_created integer not null, time_updated integer not null, data text not null);
+  `);
+  db.close();
+}
+
+function createFakeOpencodeCommand(tempRoot: string): string {
+  if (process.platform === 'win32') {
+    const commandPath = path.join(tempRoot, 'opencode.cmd');
+    fs.writeFileSync(commandPath, [
+      '@echo off',
+      'echo Exporting session: %2',
+      'echo {"messages":[{"info":{"id":"msg-user","role":"user","time":{"created":1000}},"parts":[{"id":"part-user","type":"text","text":"Hello from opencode export"}]}]}',
+    ].join('\r\n'));
+    return commandPath;
+  }
+
+  const commandPath = path.join(tempRoot, 'opencode');
+  fs.writeFileSync(commandPath, [
+    '#!/usr/bin/env sh',
+    'echo "Exporting session: $2"',
+    'echo \'{"messages":[{"info":{"id":"msg-user","role":"user","time":{"created":1000}},"parts":[{"id":"part-user","type":"text","text":"Hello from opencode export"}]}]}\'',
+  ].join('\n'));
+  fs.chmodSync(commandPath, 0o755);
+  return commandPath;
+}
 
 describe('mapOpencodeMessages', () => {
+  it('falls back to opencode export when direct SQLite reads return no rows', async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-export-history-'));
+    try {
+      const databasePath = path.join(tempRoot, 'opencode.db');
+      const cliPath = createFakeOpencodeCommand(tempRoot);
+      createEmptyOpencodeDb(databasePath);
+
+      const result = await loadOpencodeSessionMessagesWithDatabasePath('ses-export', {
+        cliPath,
+        databasePath,
+      });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]).toMatchObject({
+        content: 'Hello from opencode export',
+        role: 'user',
+      });
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it('maps stored OpenCode messages into Claudian chat messages', () => {
     const messages = mapOpencodeMessages([
       {

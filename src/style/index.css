@@ -19,6 +19,8 @@
 @import "./components/subagent.css";
 @import "./components/input.css";
 @import "./components/context-footer.css";
+@import "./components/business-line-dock.css";
+@import "./components/design-studio-panel.css";
 
 /* Toolbar */
 @import "./toolbar/model-selector.css";

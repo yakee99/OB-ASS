@@ -197,6 +197,10 @@ export class TabManager implements TabManagerInterface {
       },
     });
 
+    tab.ui.businessLineHeaderDockHost = (this.view as unknown as {
+      getBusinessLineDockHost?: () => HTMLElement | null;
+    }).getBusinessLineDockHost?.() ?? null;
+
     // Initialize UI components with provider catalog
     initializeTabUI(tab, this.plugin, {
       getProviderCatalogConfig: () => this.getProviderCatalogConfig(tab),

@@ -72,10 +72,20 @@ function getOpencodeDatabasePathCandidates(
   const candidates: string[] = [];
   const seen = new Set<string>();
   const home = env.HOME || os.homedir();
-  const dataDirs = [
-    resolveOpencodeDataDir(env),
-    path.join(home, 'Library', 'Application Support', OPENCODE_APP_NAME),
-  ];
+  const xdgDataHome = env.XDG_DATA_HOME?.trim();
+  const homeLocalShare = path.join(home, '.local', 'share', OPENCODE_APP_NAME);
+  const platformDataDir = resolveOpencodeDataDir(env);
+  const dataDirs = process.platform === 'win32' && !xdgDataHome
+    ? [
+      homeLocalShare,
+      platformDataDir,
+      path.join(home, 'Library', 'Application Support', OPENCODE_APP_NAME),
+    ]
+    : [
+      platformDataDir,
+      homeLocalShare,
+      path.join(home, 'Library', 'Application Support', OPENCODE_APP_NAME),
+    ];
 
   for (const dataDir of dataDirs) {
     pushCandidate(candidates, seen, path.join(dataDir, DEFAULT_DATABASE_NAME));

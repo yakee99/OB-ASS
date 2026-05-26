@@ -29,6 +29,7 @@ import type {
 import type { InstructionModeManager } from '../ui/InstructionModeManager';
 import type { NavigationSidebar } from '../ui/NavigationSidebar';
 import type { StatusPanel } from '../ui/StatusPanel';
+import type { BusinessLineDock } from '../ui/BusinessLineDock';
 
 /**
  * Default number of tabs allowed.
@@ -126,6 +127,9 @@ export interface TabUIComponents {
   contextUsageMeter: ContextUsageMeter | null;
   statusPanel: StatusPanel | null;
   navigationSidebar: NavigationSidebar | null;
+  businessLineDocks: Partial<Record<'zao' | 'dev', BusinessLineDock>>;
+  skillQuickActions: HTMLElement | null;
+  businessLineHeaderDockHost: HTMLElement | null;
 }
 
 /**

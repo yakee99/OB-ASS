@@ -49,6 +49,23 @@
   word-wrap: break-word;
 }
 
+.claudian-message-targeted {
+  box-shadow: 0 0 0 1px var(--interactive-accent), 0 0 0 3px var(--background-primary);
+  animation: claudian-message-target-pulse 1.6s ease;
+}
+
+@keyframes claudian-message-target-pulse {
+  0% {
+    transform: translateY(0);
+  }
+  20% {
+    transform: translateY(-1px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
 .claudian-message-user {
   position: relative;
   background: rgba(0, 0, 0, 0.3);
@@ -106,7 +123,27 @@
   gap: 4px;
 }
 
+.claudian-text-link-btn {
+  position: absolute;
+  bottom: 0;
+  inset-inline-end: 24px;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .claudian-text-copy-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.claudian-text-link-btn svg {
   width: 16px;
   height: 16px;
 }
@@ -115,11 +152,25 @@
   opacity: 1;
 }
 
+.claudian-text-block:hover .claudian-text-link-btn {
+  opacity: 1;
+}
+
 .claudian-text-copy-btn:hover {
   color: var(--text-normal);
 }
 
+.claudian-text-link-btn:hover {
+  color: var(--text-normal);
+}
+
 .claudian-text-copy-btn.copied {
+  color: var(--text-accent);
+  font-size: 11px;
+  font-family: var(--font-monospace);
+}
+
+.claudian-text-link-btn.copied {
   color: var(--text-accent);
   font-size: 11px;
   font-family: var(--font-monospace);

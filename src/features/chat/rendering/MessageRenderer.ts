@@ -51,6 +51,7 @@ export class MessageRenderer {
   private rewindCallback?: (messageId: string, mode?: ChatRewindMode) => Promise<void>;
   private getCapabilities: () => ProviderCapabilities;
   private forkCallback?: (messageId: string) => Promise<void>;
+  private buildMessageLink?: (message: ChatMessage) => string | null;
   private liveMessageEls = new Map<string, HTMLElement>();
 
   constructor(
@@ -60,6 +61,7 @@ export class MessageRenderer {
     rewindCallback?: (messageId: string, mode?: ChatRewindMode) => Promise<void>,
     forkCallback?: (messageId: string) => Promise<void>,
     getCapabilities?: () => ProviderCapabilities,
+    buildMessageLink?: (message: ChatMessage) => string | null,
   ) {
     this.app = plugin.app;
     this.plugin = plugin;
@@ -81,6 +83,7 @@ export class MessageRenderer {
       supportsTurnSteer: false,
       reasoningControl: 'none' as const,
     }));
+    this.buildMessageLink = buildMessageLink;
 
     // Register delegated click handler for file links
     registerFileLinkHandler(this.app, this.messagesEl, this.component);
@@ -135,6 +138,7 @@ export class MessageRenderer {
         const textEl = contentEl.createDiv({ cls: 'claudian-text-block' });
         void this.renderContent(textEl, textToShow);
         this.addUserCopyButton(msgEl, textToShow);
+        this.addUserLinkButton(msgEl, msg);
       }
       if (this.rewindCallback || this.forkCallback) {
         this.liveMessageEls.set(msg.id, msgEl);
@@ -172,10 +176,12 @@ export class MessageRenderer {
     const toolbar = msgEl.querySelector<HTMLElement>('.claudian-user-msg-actions');
     if (toolbar) {
       toolbar.querySelectorAll('.claudian-user-msg-copy-btn').forEach((el) => el.remove());
+      toolbar.querySelectorAll('.claudian-user-msg-link-btn').forEach((el) => el.remove());
     }
 
     if (textToShow) {
       this.addUserCopyButton(msgEl, textToShow);
+      this.addUserLinkButton(msgEl, msg);
     }
   }
 
@@ -266,6 +272,7 @@ export class MessageRenderer {
         const textEl = contentEl.createDiv({ cls: 'claudian-text-block' });
         void this.renderContent(textEl, textToShow);
         this.addUserCopyButton(msgEl, textToShow);
+        this.addUserLinkButton(msgEl, msg);
       }
       if (msg.userMessageId && this.isRewindEligible(allMessages, index)) {
         if (this.rewindCallback) {
@@ -345,6 +352,7 @@ export class MessageRenderer {
           const textEl = contentEl.createDiv({ cls: 'claudian-text-block' });
           void this.renderContent(textEl, block.content);
           this.addTextCopyButton(textEl, block.content);
+          this.addTextLinkButton(textEl, msg);
         } else if (block.type === 'tool_use') {
           const toolCall = msg.toolCalls?.find(tc => tc.id === block.toolId);
           if (toolCall) {
@@ -379,6 +387,7 @@ export class MessageRenderer {
         const textEl = contentEl.createDiv({ cls: 'claudian-text-block' });
         void this.renderContent(textEl, msg.content);
         this.addTextCopyButton(textEl, msg.content);
+        this.addTextLinkButton(textEl, msg);
       }
       if (msg.toolCalls) {
         for (const toolCall of msg.toolCalls) {
@@ -751,6 +760,44 @@ export class MessageRenderer {
     });
   }
 
+  addTextLinkButton(textEl: HTMLElement, message: ChatMessage): void {
+    const linkMarkdown = this.buildMessageLink?.(message);
+    if (!linkMarkdown) {
+      return;
+    }
+
+    const linkBtn = textEl.createSpan({ cls: 'claudian-text-link-btn' });
+    setIcon(linkBtn, 'link');
+
+    let feedbackTimeout: number | null = null;
+
+    linkBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      runRendererAction(async () => {
+        try {
+          await navigator.clipboard.writeText(linkMarkdown);
+        } catch {
+          return;
+        }
+
+        if (feedbackTimeout) {
+          window.clearTimeout(feedbackTimeout);
+        }
+
+        linkBtn.empty();
+        linkBtn.setText('Link copied!');
+        linkBtn.classList.add('copied');
+
+        feedbackTimeout = window.setTimeout(() => {
+          linkBtn.empty();
+          setIcon(linkBtn, 'link');
+          linkBtn.classList.remove('copied');
+          feedbackTimeout = null;
+        }, 1500);
+      });
+    });
+  }
+
   refreshActionButtons(msg: ChatMessage, allMessages?: ChatMessage[], index?: number): void {
     if (!msg.userMessageId) return;
     if (!this.isRewindEligible(allMessages, index)) return;
@@ -804,6 +851,41 @@ export class MessageRenderer {
           copyBtn.empty();
           setIcon(copyBtn, 'copy');
           copyBtn.classList.remove('copied');
+          feedbackTimeout = null;
+        }, 1500);
+      });
+    });
+  }
+
+  private addUserLinkButton(msgEl: HTMLElement, message: ChatMessage): void {
+    const linkMarkdown = this.buildMessageLink?.(message);
+    if (!linkMarkdown) {
+      return;
+    }
+
+    const toolbar = this.getOrCreateActionsToolbar(msgEl);
+    const linkBtn = toolbar.createSpan({ cls: 'claudian-user-msg-link-btn' });
+    setIcon(linkBtn, 'link');
+    linkBtn.setAttribute('aria-label', 'Copy message link');
+
+    let feedbackTimeout: number | null = null;
+
+    linkBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      runRendererAction(async () => {
+        try {
+          await navigator.clipboard.writeText(linkMarkdown);
+        } catch {
+          return;
+        }
+        if (feedbackTimeout) window.clearTimeout(feedbackTimeout);
+        linkBtn.empty();
+        linkBtn.setText('Link copied!');
+        linkBtn.classList.add('copied');
+        feedbackTimeout = window.setTimeout(() => {
+          linkBtn.empty();
+          setIcon(linkBtn, 'link');
+          linkBtn.classList.remove('copied');
           feedbackTimeout = null;
         }, 1500);
       });

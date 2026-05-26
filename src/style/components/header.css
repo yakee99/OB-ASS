@@ -75,3 +75,64 @@
   width: 16.8px;
   height: 16.8px;
 }
+
+.claudian-business-line-selector {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.claudian-business-line-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.claudian-business-line-current:hover {
+  background: var(--background-modifier-hover);
+}
+
+.claudian-business-line-current-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.claudian-business-line-current-chevron {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.claudian-business-line-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 180px;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 18px;
+  background: var(--background-primary);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.16);
+  display: none;
+  z-index: 100;
+}
+
+.claudian-business-line-dropdown.is-open {
+  display: block;
+}
+
+.claudian-business-line-option {
+  padding: 12px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-normal);
+}
+
+.claudian-business-line-option:hover {
+  background: var(--background-secondary);
+}

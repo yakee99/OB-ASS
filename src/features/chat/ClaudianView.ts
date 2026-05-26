@@ -13,6 +13,10 @@ import {
   scheduleAnimationFrame,
   type ScheduledAnimationFrame,
 } from '../../utils/animationFrame';
+import {
+  resolveConversationMessageId,
+  type ConversationLinkLocator,
+} from '../../utils/conversationLink';
 import type { HistoryConversationOpenState } from './controllers/ConversationController';
 import { getTabProviderId, onProviderAvailabilityChanged, updatePlanModeUI } from './tabs/Tab';
 import { TabBar } from './tabs/TabBar';
@@ -27,6 +31,7 @@ type LoadableView = {
 
 export class ClaudianView extends ItemView {
   private plugin: ClaudianPlugin;
+  private selectedBusinessLine: 'iwen' | 'design-studio' | 'dev-studio' = 'iwen';
 
   // Tab management
   private tabManager: TabManager | null = null;
@@ -40,7 +45,8 @@ export class ClaudianView extends ItemView {
   private headerEl: HTMLElement | null = null;
   private titleSlotEl: HTMLElement | null = null;
   private logoEl: HTMLElement | null = null;
-  private titleTextEl: HTMLElement | null = null;
+  private businessLineSelectorEl: HTMLElement | null = null;
+  private businessLineDropdownEl: HTMLElement | null = null;
   private headerActionsEl: HTMLElement | null = null;
   private headerActionsContent: HTMLElement | null = null;
   private newTabButtonEl: HTMLElement | null = null;
@@ -89,11 +95,29 @@ export class ClaudianView extends ItemView {
   }
 
   getDisplayText(): string {
-    return 'Claudian';
+    return this.getBusinessLineLabel();
   }
 
   getIcon(): string {
     return 'bot';
+  }
+
+  private getBusinessLineLabel(): string {
+    switch (this.selectedBusinessLine) {
+      case 'design-studio':
+        return 'Design Studio';
+      case 'dev-studio':
+        return 'Dev Studio';
+      default:
+        return 'iWen';
+    }
+  }
+
+  private syncBusinessLineDockVisibility(): void {
+    for (const tab of this.tabManager?.getAllTabs() ?? []) {
+      tab.ui.businessLineDocks.zao?.setVisible(this.selectedBusinessLine === 'design-studio');
+      tab.ui.businessLineDocks.dev?.setVisible(this.selectedBusinessLine === 'dev-studio');
+    }
   }
 
   /** Refreshes model-dependent UI across all tabs (used after settings/env changes). */
@@ -213,6 +237,7 @@ export class ClaudianView extends ItemView {
 
     this.wireEventHandlers();
     await this.restoreOrCreateTabs();
+    this.syncBusinessLineDockVisibility();
     this.syncProviderBrandColor();
     this.updateLayoutForPosition();
     this.tabManager?.primeProviderRuntime();
@@ -253,11 +278,57 @@ export class ClaudianView extends ItemView {
     this.logoEl = this.titleSlotEl.createSpan({ cls: 'claudian-logo' });
     this.syncHeaderLogo(DEFAULT_CHAT_PROVIDER_ID);
 
-    // Title text (hidden in header mode when 2+ tabs)
-    this.titleTextEl = this.titleSlotEl.createEl('h4', { text: 'Claudian', cls: 'claudian-title-text' });
+    this.buildBusinessLineSelector();
 
     // Header actions container (for header mode - initially hidden)
     this.headerActionsEl = header.createDiv({ cls: 'claudian-header-actions claudian-header-actions-slot claudian-hidden' });
+  }
+
+  private buildBusinessLineSelector(): void {
+    if (!this.titleSlotEl) return;
+
+    const selectorEl = this.titleSlotEl.createDiv({ cls: 'claudian-business-line-selector' });
+    this.businessLineSelectorEl = selectorEl;
+
+    const currentEl = selectorEl.createDiv({ cls: 'claudian-business-line-current' });
+    currentEl.createSpan({ cls: 'claudian-business-line-current-label', text: this.getBusinessLineLabel() });
+    currentEl.createSpan({ cls: 'claudian-business-line-current-chevron', text: 'v' });
+
+    const dropdownEl = selectorEl.createDiv({ cls: 'claudian-business-line-dropdown' });
+    this.businessLineDropdownEl = dropdownEl;
+
+    const options: Array<{ id: 'iwen' | 'design-studio' | 'dev-studio'; label: string }> = [
+      { id: 'iwen', label: 'iWen' },
+      { id: 'design-studio', label: 'Design Studio' },
+      { id: 'dev-studio', label: 'Dev Studio' },
+    ];
+
+    for (const option of options) {
+      const optionEl = dropdownEl.createDiv({
+        cls: 'claudian-business-line-option',
+        text: option.label,
+      });
+      optionEl.addEventListener('click', (event) => {
+        event.stopPropagation();
+        this.setBusinessLine(option.id);
+        dropdownEl.removeClass('is-open');
+      });
+    }
+
+    currentEl.addEventListener('click', (event) => {
+      event.stopPropagation();
+      dropdownEl.toggleClass('is-open', !dropdownEl.hasClass('is-open'));
+    });
+  }
+
+  private setBusinessLine(line: 'iwen' | 'design-studio' | 'dev-studio'): void {
+    this.selectedBusinessLine = line;
+    const labelEl = this.businessLineSelectorEl?.querySelector('.claudian-business-line-current-label');
+    if (labelEl) {
+      labelEl.textContent = this.getBusinessLineLabel();
+    }
+
+    this.syncBusinessLineDockVisibility();
   }
 
   /**
@@ -450,14 +521,14 @@ export class ClaudianView extends ItemView {
     // Hide tab badges when only 1 tab, show when 2+
     this.tabBarContainerEl.toggleClass('claudian-hidden', !showTabBar);
 
-    // In header mode, badges replace logo/title in the same location
-    // In input mode, keep logo/title visible (badges are in nav row)
+    // In header mode, badges replace branding in the same location.
+    // In input mode, keep branding visible (badges are in nav row).
     const hideBranding = showTabBar && isHeaderMode;
     if (this.logoEl) {
       this.logoEl.toggleClass('claudian-hidden', hideBranding);
     }
-    if (this.titleTextEl) {
-      this.titleTextEl.toggleClass('claudian-hidden', hideBranding);
+    if (this.businessLineSelectorEl) {
+      this.businessLineSelectorEl.toggleClass('claudian-hidden', hideBranding);
     }
 
     this.updateNewTabButtonVisibility();
@@ -586,6 +657,7 @@ export class ClaudianView extends ItemView {
     // Document-level click to close dropdowns
     this.registerDomEvent(activeDocument, 'click', () => {
       this.historyDropdown?.removeClass('visible');
+      this.businessLineDropdownEl?.removeClass('is-open');
     });
 
     // View-level Shift+Tab to toggle plan mode (works from any focused element)
@@ -718,5 +790,59 @@ export class ClaudianView extends ItemView {
   /** Gets the tab manager. */
   getTabManager(): TabManager | null {
     return this.tabManager;
+  }
+
+  async openConversationByLink(
+    conversationId: string,
+    locator: ConversationLinkLocator = {},
+  ): Promise<'opened' | 'message-not-found' | 'conversation-not-found'> {
+    if (!this.tabManager) {
+      return 'conversation-not-found';
+    }
+
+    await this.tabManager.openConversation(conversationId);
+
+    const tab = this.findTabWithConversation(conversationId);
+    if (!tab) {
+      return 'conversation-not-found';
+    }
+
+    if (!locator.messageId && !locator.userMessageId && !locator.assistantMessageId) {
+      return 'opened';
+    }
+
+    const resolvedMessageId = resolveConversationMessageId(tab.state.messages, locator);
+    if (!resolvedMessageId) {
+      return 'message-not-found';
+    }
+
+    const messageEl = this.findRenderedMessageElement(tab.dom.messagesEl, resolvedMessageId);
+    if (!messageEl) {
+      return 'message-not-found';
+    }
+
+    this.revealLinkedMessage(messageEl);
+    return 'opened';
+  }
+
+  private findRenderedMessageElement(
+    messagesEl: HTMLElement,
+    messageId: string,
+  ): HTMLElement | null {
+    const messageEls = Array.from(
+      messagesEl.querySelectorAll('.claudian-message'),
+    ) as HTMLElement[];
+
+    return messageEls.find((el) => el.getAttribute('data-message-id') === messageId) ?? null;
+  }
+
+  private revealLinkedMessage(messageEl: HTMLElement): void {
+    messageEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    messageEl.addClass('claudian-message-targeted');
+
+    const activeWindow = this.containerEl.ownerDocument.defaultView ?? window;
+    activeWindow.setTimeout(() => {
+      messageEl.removeClass('claudian-message-targeted');
+    }, 1600);
   }
 }

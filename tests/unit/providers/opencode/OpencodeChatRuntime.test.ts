@@ -157,6 +157,42 @@ describe('OpencodeChatRuntime', () => {
     await expect(runtime.ensureReady()).resolves.toBe(true);
   });
 
+  it('passes the resolved default database path to the OpenCode subprocess', async () => {
+    const plugin = createMockPlugin({
+      settings: {
+        providerConfigs: {
+          opencode: {
+            enabled: true,
+          },
+        },
+      },
+    });
+    const runtime = new OpencodeChatRuntime(plugin);
+
+    jest.spyOn(launchArtifacts, 'prepareOpencodeLaunchArtifacts').mockImplementation(async (params) => {
+      expect(params.runtimeEnv.OPENCODE_DB).toBeUndefined();
+      return {
+        configPath: '/tmp/claudian-opencode-config.json',
+        configContent: '{}\n',
+        databasePath: '/default/opencode.db',
+        launchKey: 'launch-key',
+        systemPromptPath: '/tmp/claudian-opencode-system.md',
+      };
+    });
+    const startProcess = jest.spyOn(runtime as any, 'startProcess').mockImplementation(async () => {
+      (runtime as any).ready = true;
+    });
+
+    await expect(runtime.ensureReady({ allowSessionCreation: false })).resolves.toBe(true);
+
+    expect(startProcess).toHaveBeenCalledWith(expect.objectContaining({
+      runtimeEnv: expect.objectContaining({
+        OPENCODE_DB: '/default/opencode.db',
+      }),
+    }));
+    expect((runtime as any).currentDatabasePath).toBe('/default/opencode.db');
+  });
+
   it('honors a metadata-only database override before any session exists', async () => {
     const plugin = createMockPlugin({
       settings: {

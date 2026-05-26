@@ -285,6 +285,10 @@ export class OpencodeChatRuntime implements ChatRuntime {
       workspaceRoot: cwd,
     });
     this.currentDatabasePath = artifacts.databasePath;
+    const launchRuntimeEnv: NodeJS.ProcessEnv = {
+      ...runtimeEnv,
+      ...(artifacts.databasePath ? { OPENCODE_DB: artifacts.databasePath } : {}),
+    };
 
     const nextLaunchKey = JSON.stringify({
       command: resolvedCliPath,
@@ -308,7 +312,7 @@ export class OpencodeChatRuntime implements ChatRuntime {
         command: resolvedCliPath,
         configPath: artifacts.configPath,
         cwd,
-        runtimeEnv,
+        runtimeEnv: launchRuntimeEnv,
       });
       this.currentLaunchKey = nextLaunchKey;
       this.loadedSessionId = null;
@@ -547,7 +551,9 @@ export class OpencodeChatRuntime implements ChatRuntime {
     const existingState = params.conversation
       ? getOpencodeState(params.conversation.providerState)
       : null;
+    const resolvedCliPath = this.plugin.getResolvedProviderCliPath('opencode') ?? existingState?.cliPath;
     const providerState: OpencodeProviderState = {
+      ...(resolvedCliPath ? { cliPath: resolvedCliPath } : {}),
       ...(this.currentDatabasePath || existingState?.databasePath
         ? { databasePath: this.currentDatabasePath ?? existingState?.databasePath }
         : {}),

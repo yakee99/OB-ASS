@@ -27,7 +27,7 @@ function createViewHarness(options: {
   };
   view.tabBarContainerEl = createMockEl();
   view.logoEl = createMockEl();
-  view.titleTextEl = createMockEl();
+  view.businessLineSelectorEl = createMockEl();
   view.newTabButtonEl = newTabButtonEl;
 
   return { newTabButtonEl, view };
@@ -55,6 +55,67 @@ describe('ClaudianView tab controls', () => {
     expect(newTabButtonEl.hasClass('claudian-hidden')).toBe(false);
     expect(newTabButtonEl.getAttribute('aria-disabled')).toBeNull();
     expect(newTabButtonEl.getAttribute('aria-hidden')).toBeNull();
+  });
+});
+
+describe('ClaudianView deep links', () => {
+  it('opens a conversation and reveals the targeted message', async () => {
+    jest.useFakeTimers();
+
+    try {
+      const messagesEl = createMockEl();
+      const targetMessageEl = messagesEl.createDiv({ cls: 'claudian-message' });
+      targetMessageEl.setAttribute('data-message-id', 'msg-2');
+      targetMessageEl.scrollIntoView = jest.fn();
+
+      const view = Object.create(ClaudianView.prototype) as any;
+      view.containerEl = createMockEl();
+      view.tabManager = {
+        openConversation: jest.fn().mockResolvedValue(undefined),
+      };
+      view.findTabWithConversation = jest.fn().mockReturnValue({
+        conversationId: 'conv-1',
+        state: {
+          messages: [
+            { id: 'msg-1', userMessageId: 'user-1' },
+            { id: 'msg-2', userMessageId: 'user-2' },
+          ],
+        },
+        dom: { messagesEl },
+      });
+
+      const result = await view.openConversationByLink('conv-1', { userMessageId: 'user-2' });
+
+      expect(result).toBe('opened');
+      expect(view.tabManager.openConversation).toHaveBeenCalledWith('conv-1');
+      expect(targetMessageEl.scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
+      expect(targetMessageEl.hasClass('claudian-message-targeted')).toBe(true);
+
+      jest.advanceTimersByTime(1600);
+      expect(targetMessageEl.hasClass('claudian-message-targeted')).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('returns message-not-found when the message locator cannot be resolved', async () => {
+    const view = Object.create(ClaudianView.prototype) as any;
+    view.tabManager = {
+      openConversation: jest.fn().mockResolvedValue(undefined),
+    };
+    view.findTabWithConversation = jest.fn().mockReturnValue({
+      conversationId: 'conv-1',
+      state: {
+        messages: [
+          { id: 'msg-1', userMessageId: 'user-1' },
+        ],
+      },
+      dom: { messagesEl: createMockEl() },
+    });
+
+    const result = await view.openConversationByLink('conv-1', { userMessageId: 'missing-user' });
+
+    expect(result).toBe('message-not-found');
   });
 });
 

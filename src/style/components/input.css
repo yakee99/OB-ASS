@@ -117,6 +117,30 @@
   padding: 4px 6px 6px 6px;
 }
 
+.claudian-skill-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 12px 12px 12px;
+}
+
+.claudian-skill-chip {
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
+}
+
+.claudian-skill-chip:hover {
+  background: var(--background-secondary);
+  border-color: var(--background-modifier-border-hover);
+}
+
 /* File indicator (attached files) */
 .claudian-file-indicator {
   display: none;

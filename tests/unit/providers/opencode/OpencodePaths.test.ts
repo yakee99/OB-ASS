@@ -13,7 +13,7 @@ describe('OpencodePaths', () => {
     expect(resolveOpencodeDataDir({
       HOME: '/home/tester',
       XDG_DATA_HOME: '/tmp/xdg-data',
-    } as NodeJS.ProcessEnv)).toBe('/tmp/xdg-data/opencode');
+    } as NodeJS.ProcessEnv)).toBe(path.join('/tmp/xdg-data', 'opencode'));
   });
 
   it('falls back to the existing resolved database when persisted metadata points at a missing path', () => {
@@ -31,5 +31,19 @@ describe('OpencodePaths', () => {
 
     expect(resolveOpencodeDatabasePath(env)).toBe(dbPath);
     expect(resolveExistingOpencodeDatabasePath('/missing/opencode.db', env)).toBe(dbPath);
+  });
+
+  it('discovers OpenCode databases under the home local share directory', () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'claudian-opencode-paths-'));
+    const localShareDir = path.join(tmpRoot, 'home', '.local', 'share', 'opencode');
+    const dbPath = path.join(localShareDir, 'opencode.db');
+    fs.mkdirSync(localShareDir, { recursive: true });
+    fs.writeFileSync(dbPath, '');
+
+    const env = {
+      HOME: path.join(tmpRoot, 'home'),
+    } as NodeJS.ProcessEnv;
+
+    expect(resolveOpencodeDatabasePath(env)).toBe(dbPath);
   });
 });

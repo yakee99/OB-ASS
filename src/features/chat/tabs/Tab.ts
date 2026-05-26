@@ -47,6 +47,7 @@ import { InstructionModeManager as InstructionModeManagerClass } from '../ui/Ins
 import { NavigationSidebar } from '../ui/NavigationSidebar';
 import { StatusPanel } from '../ui/StatusPanel';
 import { autoResizeTextarea } from '../ui/textareaResize';
+import { BusinessLineDock } from '../ui/BusinessLineDock';
 import { recalculateUsageForModel } from '../utils/usageInfo';
 import { getTabProviderId } from './providerResolution';
 import type { TabData, TabDOMElements, TabId, TabProviderContext } from './types';
@@ -450,6 +451,9 @@ export function createTab(options: TabCreateOptions): TabData {
       contextUsageMeter: null,
       statusPanel: null,
       navigationSidebar: null,
+      businessLineDocks: {},
+      skillQuickActions: null,
+      businessLineHeaderDockHost: null,
     },
     dom,
     renderer: null,
@@ -912,6 +916,64 @@ function initializeInputToolbar(
   applyProviderUIGating(tab, plugin);
 }
 
+function initializeBusinessLineDock(tab: TabData): void {
+  const dockParent = tab.ui.businessLineHeaderDockHost ?? tab.dom.contentEl;
+  const inline = Boolean(tab.ui.businessLineHeaderDockHost);
+
+  tab.ui.businessLineDocks.zao = new BusinessLineDock(
+    dockParent,
+    {
+      variant: 'zao',
+      inputEl: tab.dom.inputEl,
+      onSend: () => {
+        void tab.controllers.inputController?.sendMessage();
+      },
+      inline,
+    },
+  );
+
+  tab.ui.businessLineDocks.dev = new BusinessLineDock(
+    dockParent,
+    {
+      variant: 'dev',
+      inputEl: tab.dom.inputEl,
+      onSend: () => {
+        void tab.controllers.inputController?.sendMessage();
+      },
+      inline,
+    },
+  );
+
+  tab.ui.businessLineDocks.zao.setVisible(false);
+  tab.ui.businessLineDocks.dev.setVisible(false);
+}
+
+function initializeSkillQuickActions(tab: TabData): void {
+  const skillItems = [
+    { label: 'ZAO Studio', command: '/zao-studio' },
+    { label: 'Developer Assistant', command: '/developer-assistant' },
+    { label: 'iWen', command: '/iwen' },
+  ];
+
+  const parentEl = tab.dom.inputContainerEl.parentElement ?? tab.dom.contentEl;
+  const containerEl = parentEl.createDiv({ cls: 'claudian-skill-quick-actions' });
+  parentEl.insertBefore(containerEl, tab.dom.inputContainerEl.nextSibling);
+  tab.ui.skillQuickActions = containerEl;
+
+  for (const item of skillItems) {
+    const chipEl = containerEl.createEl('button', {
+      cls: 'claudian-skill-chip',
+      text: item.label,
+    });
+    chipEl.type = 'button';
+    chipEl.addEventListener('click', () => {
+      tab.dom.inputEl.value = item.command;
+      tab.dom.inputEl.focus();
+      autoResizeTextarea(tab.dom.inputEl);
+    });
+  }
+}
+
 export interface InitializeTabUIOptions {
   getProviderCatalogConfig?: () => ProviderCatalogInfo;
   onProviderChanged?: (providerId: ProviderId) => void | Promise<void>;
@@ -954,6 +1016,8 @@ export function initializeTabUI(
 
   initializeInstructionAndTodo(tab, plugin);
   initializeInputToolbar(tab, plugin, options.getProviderCatalogConfig, options.onProviderChanged);
+  initializeBusinessLineDock(tab);
+  initializeSkillQuickActions(tab);
 
   state.callbacks = {
     ...state.callbacks,
@@ -1190,6 +1254,12 @@ export function initializeTabControllers(
       ? (id) => handleForkRequest(tab, plugin, id, forkRequestCallback)
       : undefined,
     () => getTabCapabilities(tab, plugin),
+    (message) => {
+      if (!tab.conversationId) {
+        return null;
+      }
+      return plugin.buildMessageMarkdownLink(tab.conversationId, message);
+    },
   );
 
   // Selection controller
@@ -1596,6 +1666,11 @@ export async function destroyTab(tab: TabData): Promise<void> {
   tab.ui.statusPanel = null;
   tab.ui.navigationSidebar?.destroy();
   tab.ui.navigationSidebar = null;
+  tab.ui.businessLineDocks.zao?.destroy();
+  tab.ui.businessLineDocks.dev?.destroy();
+  tab.ui.businessLineDocks = {};
+  tab.ui.skillQuickActions?.remove();
+  tab.ui.skillQuickActions = null;
 
   tab.services.subagentManager.orphanAllActive();
   tab.services.subagentManager.clear();

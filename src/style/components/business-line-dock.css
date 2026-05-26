@@ -1,0 +1,48 @@
+.claudian-business-dock {
+  position: absolute;
+  left: 20px;
+  top: 20px;
+  z-index: 30;
+}
+
+.claudian-business-dock--dev {
+  left: 112px;
+}
+
+.claudian-business-dock--dev .claudian-business-line-btn {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: color-mix(in srgb, var(--background-primary) 90%, #2563eb 10%);
+  color: #1d4ed8;
+}
+
+.claudian-business-line-btn {
+  border: 1px solid rgba(225, 6, 0, 0.18);
+  background: color-mix(in srgb, var(--background-primary) 92%, #e10600 8%);
+  color: #e10600;
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  touch-action: none;
+  user-select: none;
+}
+
+.claudian-business-line-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+}
+
+.claudian-business-line-btn.is-active {
+  background: #e10600;
+  color: #fff7f7;
+}
+
+.claudian-business-dock.is-dragging .claudian-business-line-btn {
+  cursor: grabbing;
+  transform: scale(1.03);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+}
