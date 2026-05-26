@@ -2,13 +2,24 @@ import type { App } from 'obsidian';
 import { Notice, Platform, PluginSettingTab, Setting } from 'obsidian';
 
 import {
+  DEFAULT_BUSINESS_LINE_LABELS,
+  DEFAULT_DESIGN_STUDIO_MENU_SECTIONS,
+  DEFAULT_DEV_STUDIO_MENU_ITEMS,
+  DEFAULT_SKILL_QUICK_ACTIONS,
+} from '../../app/settings/defaultSettings';
+import {
   getHiddenProviderCommands,
   normalizeHiddenCommandList,
 } from '../../core/providers/commands/hiddenCommands';
 import { ProviderRegistry } from '../../core/providers/ProviderRegistry';
 import { ProviderWorkspaceRegistry } from '../../core/providers/ProviderWorkspaceRegistry';
 import type { ProviderId } from '../../core/providers/types';
-import type { ChatViewPlacement } from '../../core/types/settings';
+import type {
+  BusinessLineLabelSettings,
+  ChatMenuActionItem,
+  ChatMenuSection,
+  ChatViewPlacement,
+} from '../../core/types/settings';
 import { getAvailableLocales, getLocaleDisplayName, setLocale, t } from '../../i18n/i18n';
 import type { Locale, TranslationKey } from '../../i18n/types';
 import type ClaudianPlugin from '../../main';
@@ -102,6 +113,105 @@ function addHotkeySettingRow(
     item.createSpan({ cls: 'claudian-hotkey-badge', text: hotkey });
   }
   item.addEventListener('click', () => openHotkeySettings(app));
+}
+
+function formatActionLines(items: ChatMenuActionItem[]): string {
+  return items.map((item) => `${item.label} | ${item.command}`).join('\n');
+}
+
+function parseActionLines(value: string): ChatMenuActionItem[] | null {
+  const items: ChatMenuActionItem[] = [];
+  for (const rawLine of value.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+
+    const parts = line.split('|').map((part) => part.trim());
+    if (parts.length < 2 || !parts[0] || !parts[1]) {
+      return null;
+    }
+
+    const behavior = parts[2] === 'send' ? 'send' : 'fill';
+    items.push({ label: parts[0], command: parts[1], behavior });
+  }
+  return items;
+}
+
+function formatBusinessLineLabels(labels: BusinessLineLabelSettings): string {
+  return [
+    `iwen | ${labels.iwen}`,
+    `design-studio | ${labels.designStudio}`,
+    `dev-studio | ${labels.devStudio}`,
+  ].join('\n');
+}
+
+function parseBusinessLineLabels(value: string): BusinessLineLabelSettings | null {
+  const labels = { ...DEFAULT_BUSINESS_LINE_LABELS };
+  for (const rawLine of value.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+    const [rawKey, rawLabel] = line.split('|').map((part) => part.trim());
+    if (!rawKey || !rawLabel) {
+      return null;
+    }
+    if (rawKey === 'iwen') {
+      labels.iwen = rawLabel;
+    } else if (rawKey === 'design-studio') {
+      labels.designStudio = rawLabel;
+    } else if (rawKey === 'dev-studio') {
+      labels.devStudio = rawLabel;
+    } else {
+      return null;
+    }
+  }
+  return labels;
+}
+
+function normalizeMenuSections(value: unknown): ChatMenuSection[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const sections: ChatMenuSection[] = [];
+  for (const section of value) {
+    if (!section || typeof section !== 'object' || Array.isArray(section)) {
+      return null;
+    }
+    const candidate = section as Record<string, unknown>;
+    if (
+      typeof candidate.title !== 'string'
+      || typeof candidate.label !== 'string'
+      || !Array.isArray(candidate.items)
+    ) {
+      return null;
+    }
+    const items: ChatMenuActionItem[] = [];
+    for (const item of candidate.items) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return null;
+      }
+      const action = item as Record<string, unknown>;
+      if (typeof action.label !== 'string' || typeof action.command !== 'string') {
+        return null;
+      }
+      items.push({
+        ...(typeof action.id === 'string' ? { id: action.id } : {}),
+        label: action.label,
+        command: action.command,
+        ...(action.behavior === 'send' ? { behavior: 'send' as const } : {}),
+      });
+    }
+    sections.push({
+      ...(typeof candidate.id === 'string' ? { id: candidate.id } : {}),
+      title: candidate.title,
+      label: candidate.label,
+      items,
+    });
+  }
+  return sections;
 }
 
 export class ClaudianSettingTab extends PluginSettingTab {
@@ -481,6 +591,96 @@ export class ClaudianSettingTab extends PluginSettingTab {
         });
       });
 
+    new Setting(container).setName('Oiwen menus').setHeading();
+
+    new Setting(container)
+      .setName('Input quick buttons')
+      .setDesc('One button per line: Label | command | optional send. Example: iWen | /iwen')
+      .addTextArea((text) => {
+        text
+          .setPlaceholder('iWen | /iwen\nSummary | /summary')
+          .setValue(formatActionLines(this.plugin.settings.skillQuickActions ?? DEFAULT_SKILL_QUICK_ACTIONS))
+          .onChange(async (value) => {
+            const parsed = parseActionLines(value);
+            if (!parsed) {
+              return;
+            }
+            this.plugin.settings.skillQuickActions = parsed;
+            await this.plugin.saveSettings();
+            this.refreshBusinessLineConfig();
+          });
+        text.inputEl.rows = 4;
+        text.inputEl.cols = 40;
+      });
+
+    new Setting(container)
+      .setName('Business line labels')
+      .setDesc('Keep the keys fixed. Edit the text after | to rename the iWen menu labels.')
+      .addTextArea((text) => {
+        text
+          .setPlaceholder('iwen | iWen\ndesign-studio | Design Studio\ndev-studio | Dev Studio')
+          .setValue(formatBusinessLineLabels(this.plugin.settings.businessLineLabels ?? DEFAULT_BUSINESS_LINE_LABELS))
+          .onChange(async (value) => {
+            const parsed = parseBusinessLineLabels(value);
+            if (!parsed) {
+              return;
+            }
+            this.plugin.settings.businessLineLabels = parsed;
+            await this.plugin.saveSettings();
+            this.refreshBusinessLineConfig();
+          });
+        text.inputEl.rows = 3;
+        text.inputEl.cols = 40;
+      });
+
+    new Setting(container)
+      .setName('Design Studio menu')
+      .setDesc('JSON array of menu sections. Each section has title, label, and items with label/command.')
+      .addTextArea((text) => {
+        text
+          .setPlaceholder(JSON.stringify(DEFAULT_DESIGN_STUDIO_MENU_SECTIONS, null, 2))
+          .setValue(JSON.stringify(
+            this.plugin.settings.designStudioMenuSections ?? DEFAULT_DESIGN_STUDIO_MENU_SECTIONS,
+            null,
+            2,
+          ))
+          .onChange(async (value) => {
+            try {
+              const parsed = normalizeMenuSections(JSON.parse(value));
+              if (!parsed) {
+                return;
+              }
+              this.plugin.settings.designStudioMenuSections = parsed;
+              await this.plugin.saveSettings();
+              this.refreshBusinessLineConfig();
+            } catch {
+              // Save only valid JSON. The user's draft remains in the textarea.
+            }
+          });
+        text.inputEl.rows = 10;
+        text.inputEl.cols = 60;
+      });
+
+    new Setting(container)
+      .setName('Dev Studio menu')
+      .setDesc('One menu item per line: Label | command | optional send.')
+      .addTextArea((text) => {
+        text
+          .setPlaceholder('Developer Assistant | /developer-assistant')
+          .setValue(formatActionLines(this.plugin.settings.devStudioMenuItems ?? DEFAULT_DEV_STUDIO_MENU_ITEMS))
+          .onChange(async (value) => {
+            const parsed = parseActionLines(value);
+            if (!parsed) {
+              return;
+            }
+            this.plugin.settings.devStudioMenuItems = parsed;
+            await this.plugin.saveSettings();
+            this.refreshBusinessLineConfig();
+          });
+        text.inputEl.rows = 4;
+        text.inputEl.cols = 40;
+      });
+
     // --- Hotkeys ---
 
     new Setting(container).setName(t('settings.hotkeys')).setHeading();
@@ -673,6 +873,12 @@ export class ClaudianSettingTab extends PluginSettingTab {
       );
     } catch {
       // Changes will apply on the next conversation if the restart fails.
+    }
+  }
+
+  private refreshBusinessLineConfig(): void {
+    for (const view of this.plugin.getAllViews()) {
+      view.refreshBusinessLineConfig();
     }
   }
 }

@@ -18,7 +18,7 @@ import {
   type ConversationLinkLocator,
 } from '../../utils/conversationLink';
 import type { HistoryConversationOpenState } from './controllers/ConversationController';
-import { getTabProviderId, onProviderAvailabilityChanged, updatePlanModeUI } from './tabs/Tab';
+import { getTabProviderId, onProviderAvailabilityChanged, refreshBusinessLineControls, updatePlanModeUI } from './tabs/Tab';
 import { TabBar } from './tabs/TabBar';
 import { TabManager } from './tabs/TabManager';
 import type { TabData, TabId } from './tabs/types';
@@ -103,13 +103,14 @@ export class ClaudianView extends ItemView {
   }
 
   private getBusinessLineLabel(): string {
+    const labels = this.plugin.settings.businessLineLabels;
     switch (this.selectedBusinessLine) {
       case 'design-studio':
-        return 'Design Studio';
+        return labels?.designStudio ?? 'Design Studio';
       case 'dev-studio':
-        return 'Dev Studio';
+        return labels?.devStudio ?? 'Dev Studio';
       default:
-        return 'iWen';
+        return labels?.iwen ?? 'iWen';
     }
   }
 
@@ -298,9 +299,9 @@ export class ClaudianView extends ItemView {
     this.businessLineDropdownEl = dropdownEl;
 
     const options: Array<{ id: 'iwen' | 'design-studio' | 'dev-studio'; label: string }> = [
-      { id: 'iwen', label: 'iWen' },
-      { id: 'design-studio', label: 'Design Studio' },
-      { id: 'dev-studio', label: 'Dev Studio' },
+      { id: 'iwen', label: this.plugin.settings.businessLineLabels?.iwen ?? 'iWen' },
+      { id: 'design-studio', label: this.plugin.settings.businessLineLabels?.designStudio ?? 'Design Studio' },
+      { id: 'dev-studio', label: this.plugin.settings.businessLineLabels?.devStudio ?? 'Dev Studio' },
     ];
 
     for (const option of options) {
@@ -328,6 +329,21 @@ export class ClaudianView extends ItemView {
       labelEl.textContent = this.getBusinessLineLabel();
     }
 
+    this.syncBusinessLineDockVisibility();
+  }
+
+  refreshBusinessLineConfig(): void {
+    if (this.businessLineSelectorEl) {
+      this.businessLineSelectorEl.remove();
+      this.businessLineSelectorEl = null;
+      this.businessLineDropdownEl = null;
+    }
+    this.buildBusinessLineSelector();
+    this.updateTabBarVisibility();
+
+    for (const tab of this.tabManager?.getAllTabs() ?? []) {
+      refreshBusinessLineControls(tab, this.plugin);
+    }
     this.syncBusinessLineDockVisibility();
   }
 

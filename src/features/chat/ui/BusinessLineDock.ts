@@ -1,5 +1,6 @@
-import { autoResizeTextarea } from './textareaResize';
+import type { ChatMenuActionItem, ChatMenuSection } from '../../../core/types/settings';
 import { DesignStudioPanel, type DesignStudioActionItem } from './DesignStudioPanel';
+import { autoResizeTextarea } from './textareaResize';
 
 export type BusinessLineDockVariant = 'zao' | 'dev';
 
@@ -8,14 +9,25 @@ export interface BusinessLineDockOptions {
   inputEl: HTMLTextAreaElement;
   onSend?: () => void;
   inline?: boolean;
+  buttonLabel?: string;
+  panelTitle?: string;
+  panelBrand?: string;
+  designStudioSections?: ChatMenuSection[];
+  devStudioItems?: ChatMenuActionItem[];
 }
 
 class DevStudioPanel {
   private rootEl: HTMLElement;
-  private onClose: () => void;
+  private options: {
+    items: ChatMenuActionItem[];
+    onAction: (item: ChatMenuActionItem) => void;
+    onClose: () => void;
+    title?: string;
+    brand?: string;
+  };
 
-  constructor(parentEl: HTMLElement, onClose: () => void) {
-    this.onClose = onClose;
+  constructor(parentEl: HTMLElement, options: DevStudioPanel['options']) {
+    this.options = options;
     this.rootEl = parentEl.createDiv({ cls: 'claudian-design-studio-panel' });
     this.render();
   }
@@ -23,24 +35,28 @@ class DevStudioPanel {
   private render(): void {
     this.rootEl.empty();
     const headerEl = this.rootEl.createDiv({ cls: 'claudian-design-studio-panel-header' });
-    headerEl.createSpan({ cls: 'claudian-design-studio-panel-brand', text: 'DEV' });
-    headerEl.createSpan({ cls: 'claudian-design-studio-panel-title', text: 'Dev Studio' });
+    headerEl.createSpan({ cls: 'claudian-design-studio-panel-brand', text: this.options.brand ?? 'DEV' });
+    headerEl.createSpan({ cls: 'claudian-design-studio-panel-title', text: this.options.title ?? 'Dev Studio' });
 
     const closeBtn = headerEl.createEl('button', {
       cls: 'claudian-design-studio-panel-close',
       text: 'x',
     });
-    closeBtn.addEventListener('click', () => this.onClose());
+    closeBtn.addEventListener('click', () => this.options.onClose());
 
     const contentEl = this.rootEl.createDiv({ cls: 'claudian-design-studio-panel-content' });
     contentEl.createDiv({
       cls: 'claudian-design-studio-group-title',
       text: 'Developer Line',
     });
-    contentEl.createDiv({
-      cls: 'claudian-design-studio-item',
-      text: 'Dev Studio 占位面板，后续可接具体业务内容。',
-    });
+
+    for (const item of this.options.items) {
+      const itemEl = contentEl.createDiv({ cls: 'claudian-design-studio-item' });
+      const labelEl = itemEl.createSpan({ cls: 'claudian-design-studio-item-label', text: item.label });
+      labelEl.setAttribute('title', item.label);
+      itemEl.createSpan({ cls: 'claudian-design-studio-item-tag', text: item.command });
+      itemEl.addEventListener('click', () => this.options.onAction(item));
+    }
   }
 
   getElement(): HTMLElement {
@@ -89,7 +105,7 @@ export class BusinessLineDock {
   private panel: DockPanel | null = null;
   private inputEl: HTMLTextAreaElement;
   private onSend?: () => void;
-  private variant: BusinessLineDockVariant;
+  private options: BusinessLineDockOptions;
   private inline: boolean;
   private onDocumentClick: (event: MouseEvent) => void;
   private onWindowResize: () => void;
@@ -109,20 +125,20 @@ export class BusinessLineDock {
   constructor(parentEl: HTMLElement, options: BusinessLineDockOptions) {
     this.inputEl = options.inputEl;
     this.onSend = options.onSend;
-    this.variant = options.variant;
+    this.options = options;
     this.inline = options.inline === true;
 
     this.rootEl = parentEl.createDiv({
-      cls: `claudian-business-dock claudian-business-dock--${this.variant}${this.inline ? ' claudian-business-dock--inline' : ''}`,
+      cls: `claudian-business-dock claudian-business-dock--${options.variant}${this.inline ? ' claudian-business-dock--inline' : ''}`,
     });
     this.buttonEl = this.rootEl.createEl('button', {
       cls: 'claudian-business-line-btn',
-      text: this.variant === 'zao' ? 'ZAO' : 'DEV',
+      text: options.buttonLabel ?? (options.variant === 'zao' ? 'ZAO' : 'DEV'),
     });
     this.buttonEl.type = 'button';
     this.buttonEl.setAttribute(
       'aria-label',
-      this.variant === 'zao' ? 'Open design studio' : 'Open dev studio',
+      options.variant === 'zao' ? 'Open design studio' : 'Open dev studio',
     );
 
     if (!this.inline) {
@@ -237,13 +253,22 @@ export class BusinessLineDock {
     this.isOpen = true;
     this.buttonEl.addClass('is-active');
 
-    if (this.variant === 'zao') {
+    if (this.options.variant === 'zao') {
       this.panel = new DesignStudioPanel(this.rootEl.ownerDocument.body, {
         onAction: (item: DesignStudioActionItem) => this.handleAction(item),
         onClose: () => this.close(),
+        sections: this.options.designStudioSections,
+        title: this.options.panelTitle,
+        brand: this.options.panelBrand,
       });
     } else {
-      this.panel = new DevStudioPanel(this.rootEl.ownerDocument.body, () => this.close());
+      this.panel = new DevStudioPanel(this.rootEl.ownerDocument.body, {
+        items: this.options.devStudioItems ?? [],
+        onAction: (item) => this.handleAction(item),
+        onClose: () => this.close(),
+        title: this.options.panelTitle,
+        brand: this.options.panelBrand,
+      });
     }
 
     this.positionPanel();
@@ -257,7 +282,7 @@ export class BusinessLineDock {
     this.panel = null;
   }
 
-  private handleAction(item: DesignStudioActionItem): void {
+  private handleAction(item: ChatMenuActionItem): void {
     this.inputEl.value = item.command;
     this.inputEl.focus();
     autoResizeTextarea(this.inputEl);

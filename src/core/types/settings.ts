@@ -53,6 +53,29 @@ export interface KeyboardNavigationSettings {
   focusInputKey: string;       // Key to focus input (default: 'i', like vim insert mode)
 }
 
+/** Configurable quick action inserted into the chat input or business menus. */
+export interface ChatMenuActionItem {
+  id?: string;
+  label: string;
+  command: string;
+  behavior?: 'fill' | 'send';
+}
+
+/** Configurable grouped menu section for Design Studio style panels. */
+export interface ChatMenuSection {
+  id?: string;
+  title: string;
+  label: string;
+  items: ChatMenuActionItem[];
+}
+
+/** Configurable labels for the top business line switcher. */
+export interface BusinessLineLabelSettings {
+  iwen: string;
+  designStudio: string;
+  devStudio: string;
+}
+
 /** Tab bar position setting. */
 export type TabBarPosition = 'input' | 'header';
 
@@ -122,6 +145,10 @@ export interface ClaudianSettings {
   // UI settings
   keyboardNavigation: KeyboardNavigationSettings;
   requireCommandOrControlEnterToSend: boolean;
+  skillQuickActions?: ChatMenuActionItem[];
+  businessLineLabels?: BusinessLineLabelSettings;
+  designStudioMenuSections?: ChatMenuSection[];
+  devStudioMenuItems?: ChatMenuActionItem[];
 
   // Internationalization
   locale: string;

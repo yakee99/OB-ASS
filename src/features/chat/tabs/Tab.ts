@@ -15,6 +15,11 @@ import type {
   ProviderUIOption,
 } from '../../../core/providers/types';
 import {
+  DEFAULT_DESIGN_STUDIO_MENU_SECTIONS,
+  DEFAULT_DEV_STUDIO_MENU_ITEMS,
+  DEFAULT_SKILL_QUICK_ACTIONS,
+} from '../../../app/settings/defaultSettings';
+import {
   DEFAULT_CHAT_PROVIDER_ID,
 } from '../../../core/providers/types';
 import type { ChatRuntime } from '../../../core/runtime/ChatRuntime';
@@ -916,9 +921,10 @@ function initializeInputToolbar(
   applyProviderUIGating(tab, plugin);
 }
 
-function initializeBusinessLineDock(tab: TabData): void {
+function initializeBusinessLineDock(tab: TabData, plugin: ClaudianPlugin): void {
   const dockParent = tab.ui.businessLineHeaderDockHost ?? tab.dom.contentEl;
   const inline = Boolean(tab.ui.businessLineHeaderDockHost);
+  const labels = plugin.settings.businessLineLabels;
 
   tab.ui.businessLineDocks.zao = new BusinessLineDock(
     dockParent,
@@ -929,6 +935,10 @@ function initializeBusinessLineDock(tab: TabData): void {
         void tab.controllers.inputController?.sendMessage();
       },
       inline,
+      buttonLabel: labels?.designStudio ?? 'ZAO',
+      panelTitle: labels?.designStudio ?? 'Design Studio',
+      panelBrand: 'ZAO',
+      designStudioSections: plugin.settings.designStudioMenuSections ?? DEFAULT_DESIGN_STUDIO_MENU_SECTIONS,
     },
   );
 
@@ -941,6 +951,10 @@ function initializeBusinessLineDock(tab: TabData): void {
         void tab.controllers.inputController?.sendMessage();
       },
       inline,
+      buttonLabel: labels?.devStudio ?? 'DEV',
+      panelTitle: labels?.devStudio ?? 'Dev Studio',
+      panelBrand: 'DEV',
+      devStudioItems: plugin.settings.devStudioMenuItems ?? DEFAULT_DEV_STUDIO_MENU_ITEMS,
     },
   );
 
@@ -948,13 +962,8 @@ function initializeBusinessLineDock(tab: TabData): void {
   tab.ui.businessLineDocks.dev.setVisible(false);
 }
 
-function initializeSkillQuickActions(tab: TabData): void {
-  const skillItems = [
-    { label: 'ZAO Studio', command: '/zao-studio' },
-    { label: 'Developer Assistant', command: '/developer-assistant' },
-    { label: 'iWen', command: '/iwen' },
-  ];
-
+function initializeSkillQuickActions(tab: TabData, plugin: ClaudianPlugin): void {
+  const skillItems = plugin.settings.skillQuickActions ?? DEFAULT_SKILL_QUICK_ACTIONS;
   const parentEl = tab.dom.inputContainerEl.parentElement ?? tab.dom.contentEl;
   const containerEl = parentEl.createDiv({ cls: 'claudian-skill-quick-actions' });
   parentEl.insertBefore(containerEl, tab.dom.inputContainerEl.nextSibling);
@@ -972,6 +981,16 @@ function initializeSkillQuickActions(tab: TabData): void {
       autoResizeTextarea(tab.dom.inputEl);
     });
   }
+}
+
+export function refreshBusinessLineControls(tab: TabData, plugin: ClaudianPlugin): void {
+  tab.ui.businessLineDocks.zao?.destroy();
+  tab.ui.businessLineDocks.dev?.destroy();
+  tab.ui.businessLineDocks = {};
+  tab.ui.skillQuickActions?.remove();
+  tab.ui.skillQuickActions = null;
+  initializeBusinessLineDock(tab, plugin);
+  initializeSkillQuickActions(tab, plugin);
 }
 
 export interface InitializeTabUIOptions {
@@ -1016,8 +1035,8 @@ export function initializeTabUI(
 
   initializeInstructionAndTodo(tab, plugin);
   initializeInputToolbar(tab, plugin, options.getProviderCatalogConfig, options.onProviderChanged);
-  initializeBusinessLineDock(tab);
-  initializeSkillQuickActions(tab);
+  initializeBusinessLineDock(tab, plugin);
+  initializeSkillQuickActions(tab, plugin);
 
   state.callbacks = {
     ...state.callbacks,
