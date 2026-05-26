@@ -11,10 +11,11 @@ describe('conversationLink utilities', () => {
     const url = buildConversationLinkUrl('My Vault', 'conv-123', {
       messageId: 'msg-1',
       userMessageId: 'user-1',
+      assistantMessageId: 'assistant-1',
     });
 
     expect(url).toBe(
-      'obsidian://oiwen?vault=My+Vault&conversationId=conv-123&messageId=msg-1&userMessageId=user-1',
+      'obsidian://oiwen?vault=My+Vault&conversationId=conv-123&messageId=msg-1&userMessageId=user-1&assistantMessageId=assistant-1',
     );
   });
 

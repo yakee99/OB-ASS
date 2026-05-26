@@ -137,6 +137,7 @@ function createMockDeps(): StreamControllerDeps {
     renderer: {
       renderContent: jest.fn(),
       addTextCopyButton: jest.fn(),
+      addTextLinkButton: jest.fn(),
     } as any,
     subagentManager: {
       isAsyncTask: jest.fn().mockReturnValue(false),
@@ -296,6 +297,10 @@ describe('StreamController - Text Content', () => {
         expect.anything(),
         'Hello'
       );
+      expect(deps.renderer.addTextLinkButton).toHaveBeenCalledWith(
+        expect.anything(),
+        msg
+      );
       expect(msg.contentBlocks).toContainEqual({
         type: 'text',
         content: 'Hello',
@@ -323,11 +328,15 @@ describe('StreamController - Text Content', () => {
         expect.anything(),
         'Final $x^2$'
       );
+      expect(deps.renderer.addTextLinkButton).toHaveBeenCalledWith(
+        expect.anything(),
+        msg
+      );
     });
   });
 
   describe('Text block finalization', () => {
-    it('should add copy button when finalizing text block with content', async () => {
+    it('should add copy and link buttons when finalizing text block with content', async () => {
       const msg = createTestMessage();
       deps.state.currentTextEl = createMockEl();
       deps.state.currentTextContent = 'Hello World';
@@ -337,6 +346,10 @@ describe('StreamController - Text Content', () => {
       expect(deps.renderer.addTextCopyButton).toHaveBeenCalledWith(
         expect.anything(),
         'Hello World'
+      );
+      expect(deps.renderer.addTextLinkButton).toHaveBeenCalledWith(
+        expect.anything(),
+        msg
       );
       expect(msg.contentBlocks).toContainEqual({
         type: 'text',
@@ -352,6 +365,7 @@ describe('StreamController - Text Content', () => {
       await controller.finalizeCurrentTextBlock(msg);
 
       expect(deps.renderer.addTextCopyButton).not.toHaveBeenCalled();
+      expect(deps.renderer.addTextLinkButton).not.toHaveBeenCalled();
       // Content block should still be added
       expect(msg.contentBlocks).toContainEqual({
         type: 'text',
@@ -367,6 +381,7 @@ describe('StreamController - Text Content', () => {
       await controller.finalizeCurrentTextBlock(msg);
 
       expect(deps.renderer.addTextCopyButton).not.toHaveBeenCalled();
+      expect(deps.renderer.addTextLinkButton).not.toHaveBeenCalled();
       expect(msg.contentBlocks).toEqual([]);
     });
 

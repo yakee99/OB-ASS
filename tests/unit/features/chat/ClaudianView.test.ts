@@ -117,6 +117,41 @@ describe('ClaudianView deep links', () => {
 
     expect(result).toBe('message-not-found');
   });
+
+  it('opens a conversation and reveals an assistant message by assistantMessageId', async () => {
+    jest.useFakeTimers();
+
+    try {
+      const messagesEl = createMockEl();
+      const targetMessageEl = messagesEl.createDiv({ cls: 'claudian-message' });
+      targetMessageEl.setAttribute('data-message-id', 'assistant-msg');
+      targetMessageEl.scrollIntoView = jest.fn();
+
+      const view = Object.create(ClaudianView.prototype) as any;
+      view.containerEl = createMockEl();
+      view.tabManager = {
+        openConversation: jest.fn().mockResolvedValue(undefined),
+      };
+      view.findTabWithConversation = jest.fn().mockReturnValue({
+        conversationId: 'conv-1',
+        state: {
+          messages: [
+            { id: 'user-msg', userMessageId: 'user-1' },
+            { id: 'assistant-msg', assistantMessageId: 'assistant-1' },
+          ],
+        },
+        dom: { messagesEl },
+      });
+
+      const result = await view.openConversationByLink('conv-1', { assistantMessageId: 'assistant-1' });
+
+      expect(result).toBe('opened');
+      expect(targetMessageEl.scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
+      expect(targetMessageEl.hasClass('claudian-message-targeted')).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
 
 describe('ClaudianView Escape handling', () => {

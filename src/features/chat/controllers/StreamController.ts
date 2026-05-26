@@ -689,6 +689,7 @@ export class StreamController {
       // Copy button added here (not during streaming) to match history-loaded messages
       if (state.currentTextEl) {
         renderer.addTextCopyButton(state.currentTextEl, state.currentTextContent);
+        renderer.addTextLinkButton(state.currentTextEl, msg);
       }
     }
     state.currentTextEl = null;
