@@ -18,6 +18,7 @@ import {
   DEFAULT_DESIGN_STUDIO_MENU_SECTIONS,
   DEFAULT_DEV_STUDIO_MENU_ITEMS,
   DEFAULT_SKILL_QUICK_ACTIONS,
+  DEFAULT_SKILL_QUICK_ACTIONS_BY_BUSINESS_LINE,
 } from '../../../app/settings/defaultSettings';
 import {
   DEFAULT_CHAT_PROVIDER_ID,
@@ -924,6 +925,8 @@ function initializeInputToolbar(
 function initializeBusinessLineDock(tab: TabData, plugin: ClaudianPlugin): void {
   const dockParent = tab.ui.businessLineHeaderDockHost ?? tab.dom.contentEl;
   const inline = Boolean(tab.ui.businessLineHeaderDockHost);
+  const designLine = plugin.settings.businessLines?.find((line) => line.dock === 'design-studio');
+  const devLine = plugin.settings.businessLines?.find((line) => line.dock === 'dev-studio');
   const labels = plugin.settings.businessLineLabels;
 
   tab.ui.businessLineDocks.zao = new BusinessLineDock(
@@ -935,8 +938,8 @@ function initializeBusinessLineDock(tab: TabData, plugin: ClaudianPlugin): void 
         void tab.controllers.inputController?.sendMessage();
       },
       inline,
-      buttonLabel: labels?.designStudio ?? 'ZAO',
-      panelTitle: labels?.designStudio ?? 'Design Studio',
+      buttonLabel: designLine?.label ?? labels?.designStudio ?? 'ZAO',
+      panelTitle: designLine?.label ?? labels?.designStudio ?? 'Design Studio',
       panelBrand: 'ZAO',
       designStudioSections: plugin.settings.designStudioMenuSections ?? DEFAULT_DESIGN_STUDIO_MENU_SECTIONS,
     },
@@ -951,8 +954,8 @@ function initializeBusinessLineDock(tab: TabData, plugin: ClaudianPlugin): void 
         void tab.controllers.inputController?.sendMessage();
       },
       inline,
-      buttonLabel: labels?.devStudio ?? 'DEV',
-      panelTitle: labels?.devStudio ?? 'Dev Studio',
+      buttonLabel: devLine?.label ?? labels?.devStudio ?? 'DEV',
+      panelTitle: devLine?.label ?? labels?.devStudio ?? 'Dev Studio',
       panelBrand: 'DEV',
       devStudioItems: plugin.settings.devStudioMenuItems ?? DEFAULT_DEV_STUDIO_MENU_ITEMS,
     },
@@ -962,8 +965,15 @@ function initializeBusinessLineDock(tab: TabData, plugin: ClaudianPlugin): void 
   tab.ui.businessLineDocks.dev.setVisible(false);
 }
 
-function initializeSkillQuickActions(tab: TabData, plugin: ClaudianPlugin): void {
-  const skillItems = plugin.settings.skillQuickActions ?? DEFAULT_SKILL_QUICK_ACTIONS;
+function getSkillQuickActions(plugin: ClaudianPlugin, businessLineId: string) {
+  return plugin.settings.skillQuickActionsByBusinessLine?.[businessLineId]
+    ?? DEFAULT_SKILL_QUICK_ACTIONS_BY_BUSINESS_LINE[businessLineId as keyof typeof DEFAULT_SKILL_QUICK_ACTIONS_BY_BUSINESS_LINE]
+    ?? plugin.settings.skillQuickActions
+    ?? DEFAULT_SKILL_QUICK_ACTIONS;
+}
+
+function initializeSkillQuickActions(tab: TabData, plugin: ClaudianPlugin, businessLineId: string): void {
+  const skillItems = getSkillQuickActions(plugin, businessLineId);
   const parentEl = tab.dom.inputContainerEl.parentElement ?? tab.dom.contentEl;
   const containerEl = parentEl.createDiv({ cls: 'claudian-skill-quick-actions' });
   parentEl.insertBefore(containerEl, tab.dom.inputContainerEl.nextSibling);
@@ -983,14 +993,14 @@ function initializeSkillQuickActions(tab: TabData, plugin: ClaudianPlugin): void
   }
 }
 
-export function refreshBusinessLineControls(tab: TabData, plugin: ClaudianPlugin): void {
+export function refreshBusinessLineControls(tab: TabData, plugin: ClaudianPlugin, businessLineId = 'iwen'): void {
   tab.ui.businessLineDocks.zao?.destroy();
   tab.ui.businessLineDocks.dev?.destroy();
   tab.ui.businessLineDocks = {};
   tab.ui.skillQuickActions?.remove();
   tab.ui.skillQuickActions = null;
   initializeBusinessLineDock(tab, plugin);
-  initializeSkillQuickActions(tab, plugin);
+  initializeSkillQuickActions(tab, plugin, businessLineId);
 }
 
 export interface InitializeTabUIOptions {
@@ -1036,7 +1046,7 @@ export function initializeTabUI(
   initializeInstructionAndTodo(tab, plugin);
   initializeInputToolbar(tab, plugin, options.getProviderCatalogConfig, options.onProviderChanged);
   initializeBusinessLineDock(tab, plugin);
-  initializeSkillQuickActions(tab, plugin);
+  initializeSkillQuickActions(tab, plugin, 'iwen');
 
   state.callbacks = {
     ...state.callbacks,

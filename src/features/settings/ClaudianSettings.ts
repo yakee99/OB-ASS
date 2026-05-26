@@ -2,10 +2,10 @@ import type { App } from 'obsidian';
 import { Notice, Platform, PluginSettingTab, Setting } from 'obsidian';
 
 import {
-  DEFAULT_BUSINESS_LINE_LABELS,
+  DEFAULT_BUSINESS_LINES,
   DEFAULT_DESIGN_STUDIO_MENU_SECTIONS,
   DEFAULT_DEV_STUDIO_MENU_ITEMS,
-  DEFAULT_SKILL_QUICK_ACTIONS,
+  DEFAULT_SKILL_QUICK_ACTIONS_BY_BUSINESS_LINE,
 } from '../../app/settings/defaultSettings';
 import {
   getHiddenProviderCommands,
@@ -15,7 +15,7 @@ import { ProviderRegistry } from '../../core/providers/ProviderRegistry';
 import { ProviderWorkspaceRegistry } from '../../core/providers/ProviderWorkspaceRegistry';
 import type { ProviderId } from '../../core/providers/types';
 import type {
-  BusinessLineLabelSettings,
+  BusinessLineSettings,
   ChatMenuActionItem,
   ChatMenuSection,
   ChatViewPlacement,
@@ -138,36 +138,78 @@ function parseActionLines(value: string): ChatMenuActionItem[] | null {
   return items;
 }
 
-function formatBusinessLineLabels(labels: BusinessLineLabelSettings): string {
-  return [
-    `iwen | ${labels.iwen}`,
-    `design-studio | ${labels.designStudio}`,
-    `dev-studio | ${labels.devStudio}`,
-  ].join('\n');
+function formatBusinessLines(lines: BusinessLineSettings[]): string {
+  return lines.map((line) => `${line.id} | ${line.label} | ${line.dock ?? 'none'}`).join('\n');
 }
 
-function parseBusinessLineLabels(value: string): BusinessLineLabelSettings | null {
-  const labels = { ...DEFAULT_BUSINESS_LINE_LABELS };
+function parseBusinessLines(value: string): BusinessLineSettings[] | null {
+  const lines: BusinessLineSettings[] = [];
+  const seenIds = new Set<string>();
   for (const rawLine of value.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) {
       continue;
     }
-    const [rawKey, rawLabel] = line.split('|').map((part) => part.trim());
-    if (!rawKey || !rawLabel) {
+    const [rawId, rawLabel, rawDock] = line.split('|').map((part) => part.trim());
+    if (!rawId || !rawLabel || seenIds.has(rawId)) {
       return null;
     }
-    if (rawKey === 'iwen') {
-      labels.iwen = rawLabel;
-    } else if (rawKey === 'design-studio') {
-      labels.designStudio = rawLabel;
-    } else if (rawKey === 'dev-studio') {
-      labels.devStudio = rawLabel;
-    } else {
+
+    const dock = rawDock || 'none';
+    if (dock !== 'none' && dock !== 'design-studio' && dock !== 'dev-studio') {
       return null;
     }
+
+    seenIds.add(rawId);
+    lines.push({ id: rawId, label: rawLabel, dock });
   }
-  return labels;
+  return lines.length > 0 ? lines : null;
+}
+
+function formatQuickActionsByBusinessLine(actionsByLine: Record<string, ChatMenuActionItem[]>): string {
+  return Object.entries(actionsByLine)
+    .map(([lineId, items]) => `[${lineId}]\n${formatActionLines(items)}`)
+    .join('\n\n');
+}
+
+function parseQuickActionsByBusinessLine(value: string): Record<string, ChatMenuActionItem[]> | null {
+  const result: Record<string, ChatMenuActionItem[]> = {};
+  let currentLineId = '';
+  let currentLines: string[] = [];
+
+  const flush = (): boolean => {
+    if (!currentLineId) {
+      return currentLines.every((line) => !line.trim() || line.trim().startsWith('#'));
+    }
+    const parsed = parseActionLines(currentLines.join('\n'));
+    if (!parsed) {
+      return false;
+    }
+    result[currentLineId] = parsed;
+    return true;
+  };
+
+  for (const rawLine of value.split(/\r?\n/)) {
+    const trimmed = rawLine.trim();
+    const headerMatch = trimmed.match(/^\[([^\]]+)\]$/);
+    if (headerMatch) {
+      if (!flush()) {
+        return null;
+      }
+      currentLineId = headerMatch[1].trim();
+      currentLines = [];
+      if (!currentLineId) {
+        return null;
+      }
+      continue;
+    }
+    currentLines.push(rawLine);
+  }
+
+  if (!flush()) {
+    return null;
+  }
+  return result;
 }
 
 function normalizeMenuSections(value: unknown): ChatMenuSection[] | null {
@@ -594,18 +636,18 @@ export class ClaudianSettingTab extends PluginSettingTab {
     new Setting(container).setName('Oiwen menus').setHeading();
 
     new Setting(container)
-      .setName('Input quick buttons')
-      .setDesc('One button per line: Label | command | optional send. Example: iWen | /iwen')
+      .setName('Business lines')
+      .setDesc('One business line per line: id | label | dock. Dock can be none, design-studio, or dev-studio. Add or remove lines here.')
       .addTextArea((text) => {
         text
-          .setPlaceholder('iWen | /iwen\nSummary | /summary')
-          .setValue(formatActionLines(this.plugin.settings.skillQuickActions ?? DEFAULT_SKILL_QUICK_ACTIONS))
+          .setPlaceholder('iwen | iWen | none\ndesign-studio | Design Studio | design-studio\ndev-studio | Dev Studio | dev-studio')
+          .setValue(formatBusinessLines(this.plugin.settings.businessLines ?? DEFAULT_BUSINESS_LINES))
           .onChange(async (value) => {
-            const parsed = parseActionLines(value);
+            const parsed = parseBusinessLines(value);
             if (!parsed) {
               return;
             }
-            this.plugin.settings.skillQuickActions = parsed;
+            this.plugin.settings.businessLines = parsed;
             await this.plugin.saveSettings();
             this.refreshBusinessLineConfig();
           });
@@ -614,23 +656,26 @@ export class ClaudianSettingTab extends PluginSettingTab {
       });
 
     new Setting(container)
-      .setName('Business line labels')
-      .setDesc('Keep the keys fixed. Edit the text after | to rename the iWen menu labels.')
+      .setName('Quick buttons by business line')
+      .setDesc('Use [business-line-id] sections. Under each section, add one button per line: Label | command | optional send.')
       .addTextArea((text) => {
         text
-          .setPlaceholder('iwen | iWen\ndesign-studio | Design Studio\ndev-studio | Dev Studio')
-          .setValue(formatBusinessLineLabels(this.plugin.settings.businessLineLabels ?? DEFAULT_BUSINESS_LINE_LABELS))
+          .setPlaceholder('[iwen]\niWen | /iwen\n\n[design-studio]\nZAO Studio | /zao-studio\n\n[dev-studio]\nDeveloper Assistant | /developer-assistant')
+          .setValue(formatQuickActionsByBusinessLine(
+            this.plugin.settings.skillQuickActionsByBusinessLine
+              ?? DEFAULT_SKILL_QUICK_ACTIONS_BY_BUSINESS_LINE,
+          ))
           .onChange(async (value) => {
-            const parsed = parseBusinessLineLabels(value);
+            const parsed = parseQuickActionsByBusinessLine(value);
             if (!parsed) {
               return;
             }
-            this.plugin.settings.businessLineLabels = parsed;
+            this.plugin.settings.skillQuickActionsByBusinessLine = parsed;
             await this.plugin.saveSettings();
             this.refreshBusinessLineConfig();
           });
-        text.inputEl.rows = 3;
-        text.inputEl.cols = 40;
+        text.inputEl.rows = 10;
+        text.inputEl.cols = 50;
       });
 
     new Setting(container)

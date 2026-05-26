@@ -76,6 +76,13 @@ export interface BusinessLineLabelSettings {
   devStudio: string;
 }
 
+/** Configurable top-level business line shown in the Oiwen header. */
+export interface BusinessLineSettings {
+  id: string;
+  label: string;
+  dock?: 'design-studio' | 'dev-studio' | 'none';
+}
+
 /** Tab bar position setting. */
 export type TabBarPosition = 'input' | 'header';
 
@@ -147,6 +154,8 @@ export interface ClaudianSettings {
   requireCommandOrControlEnterToSend: boolean;
   skillQuickActions?: ChatMenuActionItem[];
   businessLineLabels?: BusinessLineLabelSettings;
+  businessLines?: BusinessLineSettings[];
+  skillQuickActionsByBusinessLine?: Record<string, ChatMenuActionItem[]>;
   designStudioMenuSections?: ChatMenuSection[];
   devStudioMenuItems?: ChatMenuActionItem[];
 

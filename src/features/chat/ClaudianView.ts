@@ -1,11 +1,13 @@
 import type { EventRef, WorkspaceLeaf } from 'obsidian';
 import { ItemView, Notice, Scope, setIcon } from 'obsidian';
 
+import { DEFAULT_BUSINESS_LINES } from '../../app/settings/defaultSettings';
 import { getHiddenProviderCommandSet } from '../../core/providers/commands/hiddenCommands';
 import { ProviderRegistry } from '../../core/providers/ProviderRegistry';
 import { ProviderSettingsCoordinator } from '../../core/providers/ProviderSettingsCoordinator';
 import { DEFAULT_CHAT_PROVIDER_ID, type ProviderId } from '../../core/providers/types';
 import { VIEW_TYPE_CLAUDIAN } from '../../core/types';
+import type { BusinessLineSettings } from '../../core/types/settings';
 import type ClaudianPlugin from '../../main';
 import { createProviderIconSvg } from '../../shared/icons';
 import {
@@ -31,7 +33,7 @@ type LoadableView = {
 
 export class ClaudianView extends ItemView {
   private plugin: ClaudianPlugin;
-  private selectedBusinessLine: 'iwen' | 'design-studio' | 'dev-studio' = 'iwen';
+  private selectedBusinessLine = 'iwen';
 
   // Tab management
   private tabManager: TabManager | null = null;
@@ -103,21 +105,37 @@ export class ClaudianView extends ItemView {
   }
 
   private getBusinessLineLabel(): string {
-    const labels = this.plugin.settings.businessLineLabels;
-    switch (this.selectedBusinessLine) {
-      case 'design-studio':
-        return labels?.designStudio ?? 'Design Studio';
-      case 'dev-studio':
-        return labels?.devStudio ?? 'Dev Studio';
-      default:
-        return labels?.iwen ?? 'iWen';
+    return this.getBusinessLine(this.selectedBusinessLine)?.label
+      ?? this.getBusinessLines()[0]?.label
+      ?? 'iWen';
+  }
+
+  private getBusinessLines(): BusinessLineSettings[] {
+    const configured = this.plugin.settings.businessLines;
+    if (Array.isArray(configured) && configured.length > 0) {
+      return configured.filter((line) => line.id && line.label);
     }
+    return DEFAULT_BUSINESS_LINES;
+  }
+
+  private getBusinessLine(id: string): BusinessLineSettings | null {
+    return this.getBusinessLines().find((line) => line.id === id) ?? null;
+  }
+
+  private ensureSelectedBusinessLine(): string {
+    const lines = this.getBusinessLines();
+    if (lines.some((line) => line.id === this.selectedBusinessLine)) {
+      return this.selectedBusinessLine;
+    }
+    this.selectedBusinessLine = lines[0]?.id ?? 'iwen';
+    return this.selectedBusinessLine;
   }
 
   private syncBusinessLineDockVisibility(): void {
+    const dock = this.getBusinessLine(this.ensureSelectedBusinessLine())?.dock ?? 'none';
     for (const tab of this.tabManager?.getAllTabs() ?? []) {
-      tab.ui.businessLineDocks.zao?.setVisible(this.selectedBusinessLine === 'design-studio');
-      tab.ui.businessLineDocks.dev?.setVisible(this.selectedBusinessLine === 'dev-studio');
+      tab.ui.businessLineDocks.zao?.setVisible(dock === 'design-studio');
+      tab.ui.businessLineDocks.dev?.setVisible(dock === 'dev-studio');
     }
   }
 
@@ -287,6 +305,7 @@ export class ClaudianView extends ItemView {
 
   private buildBusinessLineSelector(): void {
     if (!this.titleSlotEl) return;
+    this.ensureSelectedBusinessLine();
 
     const selectorEl = this.titleSlotEl.createDiv({ cls: 'claudian-business-line-selector' });
     this.businessLineSelectorEl = selectorEl;
@@ -298,13 +317,7 @@ export class ClaudianView extends ItemView {
     const dropdownEl = selectorEl.createDiv({ cls: 'claudian-business-line-dropdown' });
     this.businessLineDropdownEl = dropdownEl;
 
-    const options: Array<{ id: 'iwen' | 'design-studio' | 'dev-studio'; label: string }> = [
-      { id: 'iwen', label: this.plugin.settings.businessLineLabels?.iwen ?? 'iWen' },
-      { id: 'design-studio', label: this.plugin.settings.businessLineLabels?.designStudio ?? 'Design Studio' },
-      { id: 'dev-studio', label: this.plugin.settings.businessLineLabels?.devStudio ?? 'Dev Studio' },
-    ];
-
-    for (const option of options) {
+    for (const option of this.getBusinessLines()) {
       const optionEl = dropdownEl.createDiv({
         cls: 'claudian-business-line-option',
         text: option.label,
@@ -322,13 +335,16 @@ export class ClaudianView extends ItemView {
     });
   }
 
-  private setBusinessLine(line: 'iwen' | 'design-studio' | 'dev-studio'): void {
+  private setBusinessLine(line: string): void {
     this.selectedBusinessLine = line;
     const labelEl = this.businessLineSelectorEl?.querySelector('.claudian-business-line-current-label');
     if (labelEl) {
       labelEl.textContent = this.getBusinessLineLabel();
     }
 
+    for (const tab of this.tabManager?.getAllTabs() ?? []) {
+      refreshBusinessLineControls(tab, this.plugin, this.selectedBusinessLine);
+    }
     this.syncBusinessLineDockVisibility();
   }
 
@@ -342,7 +358,7 @@ export class ClaudianView extends ItemView {
     this.updateTabBarVisibility();
 
     for (const tab of this.tabManager?.getAllTabs() ?? []) {
-      refreshBusinessLineControls(tab, this.plugin);
+      refreshBusinessLineControls(tab, this.plugin, this.ensureSelectedBusinessLine());
     }
     this.syncBusinessLineDockVisibility();
   }

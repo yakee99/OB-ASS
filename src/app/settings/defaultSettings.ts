@@ -14,6 +14,12 @@ export const DEFAULT_BUSINESS_LINE_LABELS = {
   devStudio: 'Dev Studio',
 };
 
+export const DEFAULT_BUSINESS_LINES = [
+  { id: 'iwen', label: 'iWen', dock: 'none' as const },
+  { id: 'design-studio', label: 'Design Studio', dock: 'design-studio' as const },
+  { id: 'dev-studio', label: 'Dev Studio', dock: 'dev-studio' as const },
+];
+
 export const DEFAULT_DEV_STUDIO_MENU_ITEMS = [
   { label: 'Developer Assistant', command: '/developer-assistant' },
 ];
@@ -91,6 +97,18 @@ export const DEFAULT_DESIGN_STUDIO_MENU_SECTIONS = [
   },
 ];
 
+export const DEFAULT_SKILL_QUICK_ACTIONS_BY_BUSINESS_LINE = {
+  iwen: DEFAULT_SKILL_QUICK_ACTIONS,
+  'design-studio': [
+    { label: 'ZAO Studio', command: '/zao-studio' },
+    { label: 'Project Window', command: '/project-window' },
+    { label: 'Design Director', command: '/design-director' },
+  ],
+  'dev-studio': [
+    { label: 'Developer Assistant', command: '/developer-assistant' },
+  ],
+};
+
 export const DEFAULT_CLAUDIAN_SETTINGS: ClaudianSettings = {
   userName: '',
 
@@ -121,6 +139,8 @@ export const DEFAULT_CLAUDIAN_SETTINGS: ClaudianSettings = {
   requireCommandOrControlEnterToSend: false,
   skillQuickActions: DEFAULT_SKILL_QUICK_ACTIONS,
   businessLineLabels: DEFAULT_BUSINESS_LINE_LABELS,
+  businessLines: DEFAULT_BUSINESS_LINES,
+  skillQuickActionsByBusinessLine: DEFAULT_SKILL_QUICK_ACTIONS_BY_BUSINESS_LINE,
   designStudioMenuSections: DEFAULT_DESIGN_STUDIO_MENU_SECTIONS,
   devStudioMenuItems: DEFAULT_DEV_STUDIO_MENU_ITEMS,
 
